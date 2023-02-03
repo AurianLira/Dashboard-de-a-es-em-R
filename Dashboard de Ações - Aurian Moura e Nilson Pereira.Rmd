@@ -1,0 +1,174 @@
+---
+title: "Dashboard de Ações"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: scroll
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(tidyquant)
+library(quantmod)
+library(dplyr)
+library(ggplot2)
+library(plotly)
+library(DT)
+
+acoes <- c(
+  "DISB34", "AMZO34", "NFLX34", "GOGL34", "AAPL34", "PEPB34", "COCA34"
+) %>%
+  paste0(".SA") %>%
+  tq_get(get = "stock.prices", from = "2021-01-01") %>%
+  mutate (symbol = sub(".SA", "", symbol))
+
+qte_dias <- data.frame(
+  periodo = c("1S", "1M", "3M", "6M", "1A", "2A"),
+  dias = c(7, 30, 90, 180, 365, 730)
+)
+
+colours = c("DISB34" = "darkred", "AMZO34" = "orange", 
+  "NFLX34" = "red",   "GOGL34" = "green", 
+    "AAPL34" = "cyan", "PEPB34" = "yellow", "COCA34" = "purple"
+)
+
+```
+
+
+Column {.sidebar}
+-----------------------------------------------------------------------
+
+```{r}
+selectInput(
+  "acao", label = "Selecione a ação",
+  choices = c(
+  "DISB34", "AMZO34", "NFLX34", "GOGL34", "AAPL34", "PEPB34", "COCA34"
+))
+
+selectInput(
+  "periodo", label = "Selecione o período",
+  choices = c("1S", "1M", "3M", "6M", "1A", "2A")
+)
+```
+
+
+
+Row {.tabset}
+-----------------------------------------------------------------------
+
+### Tendência por ação
+
+```{r}
+renderPlotly({
+  periodo <- Sys.Date() - filter(qte_dias, periodo == input$periodo)$dias
+  
+  acoes %>%
+    filter(date >= periodo, symbol == input$acao) %>%
+    ggplot() +
+    geom_line(aes(x = date, y = adjusted, color = symbol)) +
+    scale_color_manual(values = colours) +
+    labs(x = "Data", y = "Cotação", color = "Ação") +
+    ggtitle(label = input$acao) +
+    theme_bw()
+})
+```
+
+### Todas as tendências
+
+```{r}
+renderPlotly({
+  periodo <- Sys.Date() - filter(qte_dias, periodo == input$periodo)$dias
+  
+  acoes %>%
+    filter(date >= periodo) %>%
+    ggplot() +
+    aes(x = date, y = adjusted, color = symbol) +
+    geom_line() +
+    scale_color_manual(values = colours) +
+    labs(x = "", y = "Cotação", color = "Ação") +
+    theme_bw()
+})
+```
+
+Row {.tabset}
+-----------------------------------------------------------------------
+
+### Cotações
+
+```{r}
+renderDataTable({
+  periodo <- Sys.Date() - filter(qte_dias, periodo == input$periodo)$dias
+  
+  acoes %>%
+    filter(date >= periodo, symbol == input$acao) %>%
+    mutate(across(where(is.double), round, digits =2))  %>%
+    arrange(desc(date)) %>%
+    rename (
+      Ação = symbol,
+      Data = date,
+      Abertura = open,
+      Máximo = high,
+      Mínimo = low,
+      Fechamento = close,
+      Volume = volume,
+      Ajustado = adjusted
+    ) %>%
+    datatable(rownames = FALSE) 
+})
+```
+Row {.tabset}
+-----------------------------------------------------------------------
+
+### Regressão linear
+
+```{r}
+renderPlot ({
+  periodo <- Sys.Date() - filter(qte_dias, periodo == input$periodo)$dias
+  
+  acoes %>%
+    filter(date >= periodo, symbol == input$acao) %>%
+    ggplot() +
+    aes(x = date, y = adjusted) +
+    geom_point(size = 1.5) +
+    geom_smooth(method = "lm", se= FALSE, col = "blue", size = 0.7) +
+    labs(x = "Data", y = "Cotação", color = "Ação") +
+    ggtitle(label = input$acao) +
+    theme_bw()
+})
+
+```
+
+Row{.tabset}
+------------------------------------------------------------------------
+### Gráfico de candlesticks
+```{r}
+renderPlot ({
+  periodo <- Sys.Date() - filter(qte_dias, periodo == input$periodo)$dias
+  
+  acoes %>%
+    filter(date >= periodo, symbol == input$acao) %>%
+    ggplot(aes(x = date, y = close)) +
+    geom_candlestick(aes(open = open, close = close, high = high, low = low)) +
+    geom_ma(ma_fun = SMA, n = 10, color = "black", size=2) +
+    labs(x = "Data", y = "") + ggtitle(label = input$acao) + theme_bw()
+})
+
+````
+
+Row{.tabset}
+------------------------------------------------------------------------
+### Gráfico de volume
+```{r}
+renderPlotly ({
+  periodo <- Sys.Date() - filter(qte_dias, periodo == input$periodo)$dias
+  
+  acoes %>%
+    filter(date >= periodo, symbol == input$acao) %>%
+    ggplot(aes(x = date, y = volume)) +
+    geom_bar(stat="identity", alpha = 0.8, position = "dodge", fill ="blue") +
+    labs(x = "Data", y = "Volume", fill = "Ação") +
+    theme_bw()
+})
+
+````
